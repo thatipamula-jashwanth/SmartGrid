@@ -2,7 +2,7 @@ import numpy as np
 from numba import njit, prange
 
 
-@njit(parallel=True)
+@njit(parallel=True, cache=True)
 def _predict_batch_precomputed(
     pre_votes,
     num_classes,
@@ -22,8 +22,8 @@ def _predict_batch_precomputed(
         y = XYZ[i, 1]
         z = XYZ[i, 2]
 
-
-        if not (x == x and y == y and z == z):
+        # NaN check
+        if x != x or y != y or z != z:
             out[i] = majority_class
             continue
 
@@ -47,6 +47,11 @@ def _predict_batch_precomputed(
 
         votes = pre_votes[bx, by, bz]
 
+        # Empty cell → fallback
+        if votes.sum() == 0.0:
+            out[i] = majority_class
+            continue
+
         max_cls = 0
         max_val = votes[0] * class_weights[0]
 
@@ -56,19 +61,21 @@ def _predict_batch_precomputed(
                 max_val = v
                 max_cls = c
 
-        out[i] = majority_class if max_val <= 0.0 else max_cls
+        out[i] = max_cls
 
     return out
 
 
 def predict_batch(ranges, XYZ):
-
-
     pre_votes = ranges["pre_votes"]
     if not pre_votes.flags["C_CONTIGUOUS"]:
         pre_votes = np.ascontiguousarray(pre_votes, dtype=np.float32)
 
     XYZ = np.asarray(XYZ, dtype=np.float32)
+
+    class_weights = ranges["class_weights"]
+    if not class_weights.flags["C_CONTIGUOUS"]:
+        class_weights = np.ascontiguousarray(class_weights, dtype=np.float32)
 
     bins = ranges["bins"]
     num_classes = ranges["num_classes"]
@@ -76,9 +83,6 @@ def predict_batch(ranges, XYZ):
     inv_x = 1.0 / (ranges["xstep"] + 1e-12)
     inv_y = 1.0 / (ranges["ystep"] + 1e-12)
     inv_z = 1.0 / (ranges["zstep"] + 1e-12)
-
-
-    class_weights = ranges["class_weights"]
 
     return _predict_batch_precomputed(
         pre_votes,

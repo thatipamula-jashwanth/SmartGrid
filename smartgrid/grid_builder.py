@@ -1,7 +1,7 @@
 import numpy as np
 from numba import njit, prange
 
-@njit(parallel=True)
+@njit(parallel=True, cache=True)
 def _box_filter_x_inplace(src, dst, r):
     bins, _, _, C = src.shape
 
@@ -9,21 +9,22 @@ def _box_filter_x_inplace(src, dst, r):
         for z in range(bins):
             for c in range(C):
                 s = 0.0
-                for x in range(bins):
-                    if x == 0:
-                        x0 = 0
-                        x1 = min(bins, r + 1)
-                        for xx in range(x0, x1):
-                            s += src[xx, y, z, c]
-                    else:
-                        if x - r - 1 >= 0:
-                            s -= src[x - r - 1, y, z, c]
-                        if x + r < bins:
-                            s += src[x + r, y, z, c]
+
+                xmax = min(bins, r + 1)
+                for xx in range(xmax):
+                    s += src[xx, y, z, c]
+
+                dst[0, y, z, c] = s
+
+                for x in range(1, bins):
+                    if x - r - 1 >= 0:
+                        s -= src[x - r - 1, y, z, c]
+                    if x + r < bins:
+                        s += src[x + r, y, z, c]
                     dst[x, y, z, c] = s
 
 
-@njit(parallel=True)
+@njit(parallel=True, cache=True)
 def _box_filter_y_inplace(src, dst, r):
     bins, _, _, C = src.shape
 
@@ -31,21 +32,22 @@ def _box_filter_y_inplace(src, dst, r):
         for z in range(bins):
             for c in range(C):
                 s = 0.0
-                for y in range(bins):
-                    if y == 0:
-                        y0 = 0
-                        y1 = min(bins, r + 1)
-                        for yy in range(y0, y1):
-                            s += src[x, yy, z, c]
-                    else:
-                        if y - r - 1 >= 0:
-                            s -= src[x, y - r - 1, z, c]
-                        if y + r < bins:
-                            s += src[x, y + r, z, c]
+
+                ymax = min(bins, r + 1)
+                for yy in range(ymax):
+                    s += src[x, yy, z, c]
+
+                dst[x, 0, z, c] = s
+
+                for y in range(1, bins):
+                    if y - r - 1 >= 0:
+                        s -= src[x, y - r - 1, z, c]
+                    if y + r < bins:
+                        s += src[x, y + r, z, c]
                     dst[x, y, z, c] = s
 
 
-@njit(parallel=True)
+@njit(parallel=True, cache=True)
 def _box_filter_z_inplace(src, dst, r):
     bins, _, _, C = src.shape
 
@@ -53,24 +55,25 @@ def _box_filter_z_inplace(src, dst, r):
         for y in range(bins):
             for c in range(C):
                 s = 0.0
-                for z in range(bins):
-                    if z == 0:
-                        z0 = 0
-                        z1 = min(bins, r + 1)
-                        for zz in range(z0, z1):
-                            s += src[x, y, zz, c]
-                    else:
-                        if z - r - 1 >= 0:
-                            s -= src[x, y, z - r - 1, c]
-                        if z + r < bins:
-                            s += src[x, y, z + r, c]
+
+                zmax = min(bins, r + 1)
+                for zz in range(zmax):
+                    s += src[x, y, zz, c]
+
+                dst[x, y, 0, c] = s
+
+                for z in range(1, bins):
+                    if z - r - 1 >= 0:
+                        s -= src[x, y, z - r - 1, c]
+                    if z + r < bins:
+                        s += src[x, y, z + r, c]
                     dst[x, y, z, c] = s
 
 
 def _compute_pre_votes(grid, r):
-
-    buf1 = np.zeros_like(grid)
-    buf2 = np.zeros_like(grid)
+  
+    buf1 = np.empty_like(grid)
+    buf2 = np.empty_like(grid)
 
     _box_filter_x_inplace(grid, buf1, r)
     _box_filter_y_inplace(buf1, buf2, r)
@@ -80,6 +83,7 @@ def _compute_pre_votes(grid, r):
 
 
 def build_grid(XYZ, y, bins=20, r=1):
+
     XYZ = np.asarray(XYZ, dtype=np.float32)
     y = np.asarray(y)
 
@@ -92,7 +96,12 @@ def build_grid(XYZ, y, bins=20, r=1):
     if not (0 <= r <= 4):
         raise ValueError("r must be in [0,4]")
 
-    XYZ = np.nan_to_num(XYZ, nan=0.0)
+    XYZ = np.nan_to_num(
+        XYZ,
+        nan=0.0,
+        posinf=0.0,
+        neginf=0.0,
+    )
 
     classes, y_enc = np.unique(y, return_inverse=True)
     C = len(classes)
@@ -116,15 +125,14 @@ def build_grid(XYZ, y, bins=20, r=1):
     zi = np.clip(((Z - zmin) / zstep).astype(np.int32), 0, bins - 1)
 
     flat_idx = (
-        xi * (bins * bins * C) +
-        yi * (bins * C) +
-        zi * C +
-        y_enc
+        xi * (bins * bins * C)
+        + yi * (bins * C)
+        + zi * C
+        + y_enc
     )
 
     grid = np.zeros(bins * bins * bins * C, dtype=np.float32)
-    counts = np.bincount(flat_idx, minlength=grid.size)
-    grid[:] = counts
+    grid[:] = np.bincount(flat_idx, minlength=grid.size)
     grid = grid.reshape((bins, bins, bins, C))
 
     pre_votes = _compute_pre_votes(grid, r)
