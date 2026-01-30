@@ -5,6 +5,10 @@ set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_POSITION_INDEPENDENT_CODE ON)
 
+if (NOT CMAKE_BUILD_TYPE AND NOT MSVC)
+    set(CMAKE_BUILD_TYPE Release CACHE STRING "Build type" FORCE)
+endif()
+
 set(PYBIND11_FINDPYTHON ON)
 find_package(pybind11 REQUIRED)
 
@@ -30,11 +34,15 @@ if (MSVC)
         _smartgrid_cpp PRIVATE
         $<$<CONFIG:Release>:/O2>
         $<$<CONFIG:RelWithDebInfo>:/O2>
+        $<$<CONFIG:Release>:/fp:fast>       
     )
 else()
     target_compile_options(
-        _smartgrid_cpp PRIVATE
-        -O3
-        -fvisibility=hidden
+        _smartgrid_cpp
+        PRIVATE
+        -O3                     # explicit highest optimization
+        -ffast-math             # safe for SmartGrid kernel
+        -fvisibility=hidden     # reduce symbol exports
     )
 endif()
+
