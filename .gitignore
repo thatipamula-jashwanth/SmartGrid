@@ -1,4 +1,67 @@
-EXP4.py
 
+# Python
 __pycache__/
 *.pyc
+*.pyo
+*.pyd
+*.egg-info/
+*.egg
+.env
+.venv
+venv/
+ENV/
+
+# Python build artifacts
+
+dist/
+build/
+pip-wheel-metadata/
+
+# C++ / pybind11 artifacts
+*.so
+*.dll
+*.dylib
+*.pyd
+*.lib
+*.exp
+*.obj
+*.o
+*.a
+
+
+# CMake
+CMakeCache.txt
+CMakeFiles/
+cmake_install.cmake
+Makefile
+*.cmake
+compile_commands.json
+
+# Out-of-source builds
+build/
+build-debug/
+build-release/
+
+
+# MSVC / Visual Studio
+.vs/
+*.vcxproj*
+*.sln
+*.user
+*.tlog
+*.log
+*.idb
+*.pdb
+ipch/
+
+
+# OS junk
+.DS_Store
+Thumbs.db
+
+
+# Benchmark outputs
+*.csv
+*.log
+
+EXP4.py
